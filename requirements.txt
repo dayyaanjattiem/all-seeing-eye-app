@@ -8,8 +8,8 @@ joblib
 # -----------------------
 # Data
 # -----------------------
-pandas>=1.5.0,<2.2
 numpy==1.26.4
+pandas==2.1.4
 yfinance>=0.2.40
 pandas_datareader
 
@@ -17,19 +17,19 @@ pandas_datareader
 # ML / Deep Learning
 # -----------------------
 scikit-learn
-tensorflow>=2.12,<2.16
+tensorflow==2.15.0
 
 # -----------------------
 # Time Series / Stats
 # -----------------------
 scipy
-statsmodels
+statsmodels==0.14.2
 pmdarima
 arch
 ta
 
 # -----------------------
-# Prophet (STRICTLY PINNED)
+# Prophet (STRICT)
 # -----------------------
 prophet==1.1.5
 cmdstanpy==1.2.4
