@@ -10,3 +10,10 @@ ta
 arch
 pandas_datareader
 joblib
+
+streamlit
+yfinance>=0.2.40
+pandas
+matplotlib
+statsmodels
+scipy
