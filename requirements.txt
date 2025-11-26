@@ -18,10 +18,8 @@ matplotlib
 statsmodels
 scipy
 
-streamlit
-yfinance>=0.2.40
-pandas
 prophet
 plotly
 cmdstanpy
+
 
