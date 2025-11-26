@@ -1,202 +1,152 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import warnings
-import matplotlib.pyplot as plt
-import yfinance as yf # Needed for direct ticker data in TS analysis
+from sklearn.cluster import KMeans
+from sklearn.preprocessing import StandardScaler
+from statsmodels.tsa.holtwinters import ExponentialSmoothing
+import statsmodels.api as sm
+from datetime import timedelta
+from config import FORECAST_DAYS_TS
 
-# Import all modules
-# NOTE: Ensure config.py, data_handler.py, analysis_logic.py, and plotting.py are in the same directory.
-from config import DEFAULT_STOCKS, START_DATE, END_DATE, N_CLUSTERS, SHARIA_INDEX, TS_TICKERS, FORECAST_DAYS_TS
-from data_handler import fetch_all_data, fetch_index_data
-from analysis_logic import run_clustering, assess_valuation, run_holt_winters_forecast, analyze_correlation_beta
-from plotting import (plot_clustering_2d, plot_clustering_3d, plot_valuation, 
-                      plot_risk_assessment, plot_daily_returns_distribution, 
-                      plot_holt_winters, plot_correlation_beta)
+@st.cache_data(show_spinner="🔄 Running K-Means Clustering...")
+def run_clustering(df, n_clusters):
+    if len(df) < n_clusters:
+        st.warning(f"Not enough stocks ({len(df)}) for K={n_clusters}. Reducing K.")
+        n_clusters = max(2, len(df) // 2)
 
-# Suppress warnings
-warnings.filterwarnings('ignore', category=FutureWarning)
-plt.style.use('ggplot')
-
-# ==========================================
-# STREAMLIT CONFIGURATION
-# ==========================================
-st.set_page_config(layout="wide", page_title="All Seeing Eye - Financial Models")
-
-# --- Sidebar Inputs ---
-st.sidebar.title("📈 All Seeing Eye Config")
-
-# Ticker Input
-custom_stocks = st.sidebar.text_area(
-    "Enter Tickers for K-Means/Fundamental Analysis (comma separated)", 
-    ", ".join(DEFAULT_STOCKS)
-)
-input_tickers = [t.strip().upper() for t in custom_stocks.split(',') if t.strip()]
-
-# K-Means Input
-k_clusters = st.sidebar.slider("Number of K-Means Clusters (K)", 2, 12, N_CLUSTERS)
-
-# Holt-Winters Ticker Select
-holt_ticker = st.sidebar.selectbox("Select Ticker for Holt-Winters Forecast", TS_TICKERS)
-
-
-# ==========================================
-# DATA FETCHING
-# ==========================================
-
-log_returns, features_df = fetch_all_data(input_tickers, START_DATE, END_DATE)
-
-if features_df.empty:
-    st.error("Cannot proceed. No valid data for analysis after cleaning. Please check your ticker symbols and date range.")
-    st.stop()
+    # Separate the features
+    X_2D = df[['Volatility', 'Return']].values
+    X_3D = df[['Volatility', 'Return', 'Price_to_Book']].values
     
-features_clustered_df = run_clustering(features_df, k_clusters)
-report_df = assess_valuation(features_clustered_df)
+    # 2D Clustering
+    scaler_2d = StandardScaler()
+    X_scaled_2D = scaler_2d.fit_transform(X_2D)
+    kmeans_2d = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    df['Cluster_2D'] = kmeans_2d.fit_predict(X_scaled_2D)
 
-# --- Extract Medians for Plotting ---
-median_pe = features_clustered_df['PE_Ratio'].median()
-median_pb = features_clustered_df['Price_to_Book'].median()
-median_de = features_clustered_df['Debt_to_Equity'].median()
-median_vol = features_clustered_df['Volatility'].median()
-median_ret = features_clustered_df['Return'].median()
+    # 3D Clustering
+    scaler_3d = StandardScaler()
+    X_scaled_3D = scaler_3d.fit_transform(X_3D)
+    kmeans_3d = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    df['Cluster_3D'] = kmeans_3d.fit_predict(X_scaled_3D)
 
-# Merge numeric columns for plotting functions
-report_df['PE_Ratio'] = features_clustered_df['PE_Ratio']
-report_df['P/B_Ratio'] = features_clustered_df['Price_to_Book']
-report_df['Debt/Equity_Raw'] = features_clustered_df['Debt_to_Equity']
-report_df['Volatility_Numeric'] = features_clustered_df['Volatility']
-report_df['Return_Numeric'] = features_clustered_df['Return']
+    return df.copy()
 
+def assess_valuation(features_df):
+    """Generates the text-based valuation and suitability report."""
+    median_pe = features_df['PE_Ratio'].median()
+    median_pb = features_df['Price_to_Book'].median()
+    median_de = features_df['Debt_to_Equity'].median()
+    median_vol = features_df['Volatility'].median()
+    median_ret = features_df['Return'].median()
 
-# ==========================================
-# PAGE 1: K-MEANS & FUNDAMENTALS
-# ==========================================
+    report_data = []
 
-st.title("1️⃣ K-Means Clustering and Fundamental Analysis")
-
-st.markdown("---")
-
-# --- Clustering Visuals ---
-st.header("1.1 Risk-Return Clustering")
-col_c1, col_c2 = st.columns(2)
-
-with col_c1:
-    fig_2d = plot_clustering_2d(features_clustered_df, k_clusters)
-    st.pyplot(fig_2d)
-
-with col_c2:
-    fig_3d = plot_clustering_3d(features_clustered_df, k_clusters)
-    st.pyplot(fig_3d)
-
-st.markdown("---")
-
-# --- Valuation Visuals ---
-st.header("1.2 Valuation and Risk Metrics")
-col_v1, col_v2, col_v3 = st.columns(3)
-
-with col_v1:
-    fig_pe = plot_valuation(report_df, 'PE_Ratio', 'P/E Ratio', median_pe, median_ret, 'teal', 'P/E Valuation vs. Return')
-    st.pyplot(fig_pe)
-
-with col_v2:
-    fig_pb = plot_valuation(report_df, 'P/B_Ratio', 'P/B Ratio', median_pb, median_ret, 'purple', 'P/B Valuation vs. Return')
-    st.pyplot(fig_pb)
-
-with col_v3:
-    fig_risk = plot_risk_assessment(report_df, median_de, median_vol)
-    st.pyplot(fig_risk)
-
-st.markdown("---")
-
-# --- Distribution Plot ---
-st.header("1.3 Daily Returns Distribution (Normality Check)")
-if not log_returns.empty:
-    fig_kde = plot_daily_returns_distribution(log_returns)
-    st.pyplot(fig_kde)
-
-st.markdown("---")
-
-# --- Recommendation Report ---
-st.header("1.4 Investment Recommendation Summary")
-st.dataframe(report_df)
-
-# Final conclusive statement
-strong_buys = report_df[report_df['Suitability'].str.contains('Strong BUY')].index.tolist()
-undervalued = report_df[report_df['Valuation'].str.contains('Undervalued')].index.tolist()
-overvalued = report_df[report_df['Valuation'].str.contains('Overvalued')].index.tolist()
-
-st.success(f"🔥 **Top Strong BUY Candidates:** {', '.join(strong_buys) if strong_buys else 'None found.'}")
-st.info(f"💰 **General Undervalued Candidates:** {', '.join(undervalued) if undervalued else 'None found.'}")
-st.error(f"🛑 **Most Overvalued/Risky Stocks to Avoid:** {', '.join(overvalued) if overvalued else 'None found.'}")
-
-
-# ==========================================
-# PAGE 2: TIME SERIES & CORRELATION
-# ==========================================
-
-st.title("2️⃣ Time Series and Market Correlation Analysis")
-st.markdown("---")
-
-# --- Holt-Winters Forecast ---
-st.header(f"2.1 Holt-Winters Price Forecast: {holt_ticker}")
-
-# Line 153: Fetch full price history (FIXED WITH DEFENSIVE CHECKS)
-raw_data = yf.download(holt_ticker, start="2020-01-01", progress=False, auto_adjust=False)
-
-# Defensive Check 1: Ensure raw_data is a valid DataFrame
-if raw_data is None or raw_data.empty:
-    st.warning(f"Could not download any data for ticker: {holt_ticker}. Skipping Holt-Winters forecast.")
-else:
-    # Defensive Check 2: Select the best price column
-    if 'Adj Close' in raw_data.columns:
-        ticker_data = raw_data['Adj Close']
-    elif 'Close' in raw_data.columns:
-        ticker_data = raw_data['Close']
-    else:
-        st.error(f"Price data (Adj Close or Close) not found for {holt_ticker}. Skipping forecast.")
-        ticker_data = pd.Series() # Empty series placeholder
-        
-    # Only run forecast if data is available
-    if not ticker_data.empty:
-        # FIX: The input to run_holt_winters_forecast is a Pandas Series (ticker_data).
-        # We assume the function in analysis_logic.py now expects a Series to avoid the 'to_frame' error.
-        # If the original logic *must* have a DataFrame, we should convert it here.
-        # However, since the function is internal, the cleanest fix is to ensure the Series is passed:
-        forecast_series = run_holt_winters_forecast(ticker_data, FORECAST_DAYS_TS)
-        
-        if not forecast_series.empty:
-            # We now pass the original Series as the historical data
-            fig_hw = plot_holt_winters(holt_ticker, ticker_data, forecast_series)
-            st.pyplot(fig_hw)
+    for index, row in features_df.iterrows():
+        # Valuation Assessment
+        if row['PE_Ratio'] < median_pe and row['Price_to_Book'] < median_pb:
+            valuation = "**Undervalued**"
+        elif row['PE_Ratio'] > median_pe and row['Price_to_Book'] > median_pb:
+            valuation = "**Overvalued**"
         else:
-            st.warning("Could not generate Holt-Winters forecast for this ticker.")
+            valuation = "Fairly Valued/Mixed"
+
+        # Risk Assessment
+        if row['Volatility'] < median_vol and row['Debt_to_Equity'] < median_de:
+            risk = "Low Risk / Low Leverage"
+        elif row['Volatility'] > median_vol and row['Debt_to_Equity'] > median_de:
+            risk = "**High Risk** / High Leverage"
+        else:
+            risk = "Moderate Risk"
+
+        # Investment Suitability
+        suitability = "Neutral"
+        if 'Undervalued' in valuation and row['Return'] > median_ret:
+            suitability = "**Strong BUY** (Value + Growth)"
+        elif 'Undervalued' in valuation:
+            suitability = "**Potential BUY** (Value Play)"
+        elif 'Overvalued' in valuation and row['Volatility'] > median_vol:
+            suitability = "**Avoid/Sell** (Overvalued + High Risk)"
+            
+        report_data.append({
+            'Ticker': index,
+            'Valuation': valuation,
+            'Risk/Leverage': risk,
+            'Suitability': suitability,
+            'P/E Ratio': f"{row['PE_Ratio']:,.2f}",
+            'P/B Ratio': f"{row['Price_to_Book']:,.2f}",
+            'Debt/Equity': f"{row['Debt_to_Equity']:,.2f}",
+            'Div. Yield': f"{row['Dividend_Yield'] * 100:,.2f}%",
+            'Annual Return': f"{row['Return'] * 100:,.2f}%",
+            'Annual Volatility': f"{row['Volatility'] * 100:,.2f}%",
+        })
+
+    return pd.DataFrame(report_data).set_index('Ticker')
+
+# --- Time Series Analysis ---
+
+def run_holt_winters_forecast(price_series, forecast_days=FORECAST_DAYS_TS):
+    """Performs Holt-Winters (Exponential Smoothing) forecast."""
+    try:
+        # FIX: Assume price_series is already a Pandas Series (price column). 
+        # Remove .to_frame(name='Close') which caused the error.
+        data = price_series.dropna() 
+        if data.empty or len(data) < 100:
+            return pd.Series()
+
+        # Holt-Winters expects a Series or a DataFrame with a single column.
+        model = ExponentialSmoothing(data, trend='add', seasonal=None, initialization_method="estimated")
+        model_fit = model.fit()
+
+        forecast = model_fit.forecast(forecast_days)
+        
+        # Create forecast date index
+        last_date = data.index[-1]
+        forecast_dates = pd.bdate_range(start=last_date + timedelta(days=1), periods=forecast_days)
+        forecast.index = forecast_dates
+        
+        return forecast
+    except Exception as e:
+        # Note: Statsmodels needs at least two points to fit the trend
+        st.warning(f"Holt-Winters failed: {e}")
+        return pd.Series()
+
+def analyze_correlation_beta(df, index_ticker):
+    """Calculates correlation and Beta of stocks vs a benchmark index."""
     
-st.markdown("---")
+    # 1. Normalize and Calculate Correlation
+    normalized = df / df.iloc[0] * 100
+    correlations = df.corr()[[index_ticker]].drop(index=index_ticker)
+    correlations.columns = ['Correlation with Index']
 
-# --- Correlation & Beta Analysis ---
-st.header(f"2.2 Correlation and Beta vs. {SHARIA_INDEX}")
-
-index_df = fetch_index_data(input_tickers, SHARIA_INDEX)
-
-if not index_df.empty and SHARIA_INDEX in index_df.columns:
-    normalized_df, corr_beta_df = analyze_correlation_beta(index_df, SHARIA_INDEX)
-
-    col_corr1, col_corr2 = st.columns([2, 1])
+    # 2. Compute Beta
+    log_returns = np.log(df / df.shift(1)).dropna()
+    betas = {}
     
-    with col_corr1:
-        fig_corr = plot_correlation_beta(normalized_df, SHARIA_INDEX, corr_beta_df)
-        st.pyplot(fig_corr)
-
-    with col_corr2:
-        st.subheader("Correlation & Beta Metrics")
-        st.dataframe(corr_beta_df.style.format("{:.4f}"))
-        st.markdown(f"""
-        - **Correlation**: Measures similarity of price movement (1.0 = perfect match).
-        - **Beta**: Measures volatility relative to the index ({SHARIA_INDEX}). 
-          * **Beta > 1.0**: More volatile/higher risk than the market.
-          * **Beta < 1.0**: Less volatile/lower risk than the market.
-        """)
-elif not index_df.empty:
-     st.warning(f"Could not fetch data for the index ticker ({SHARIA_INDEX}) from Yahoo Finance.")
-else:
-    st.warning("Could not fetch necessary price data for Correlation/Beta analysis.")
+    # Ensure index_ticker is in log_returns columns before looping
+    if index_ticker in log_returns.columns:
+        market_returns = log_returns[index_ticker]
+        for ticker in log_returns.columns:
+            if ticker != index_ticker:
+                stock_returns = log_returns[ticker]
+                
+                # Check for zero variance in market returns (rare but possible in small subsets)
+                if market_returns.var() > 1e-8: 
+                    # Use OLS for Beta calculation
+                    X = sm.add_constant(market_returns)
+                    model = sm.OLS(stock_returns, X).fit()
+                    beta = model.params.get(index_ticker, np.nan)
+                    # Check if Beta is finite before assigning
+                    betas[ticker] = beta if np.isfinite(beta) else np.nan
+                else:
+                    betas[ticker] = np.nan
+    else:
+        # If the index itself failed to load, we can't calculate beta/correlation
+        st.warning(f"Index ticker {index_ticker} not available for Beta calculation.")
+        
+    beta_df = pd.DataFrame.from_dict(betas, orient='index', columns=['Beta vs Index']).sort_index()
+    
+    # Combine results
+    results = correlations.join(beta_df)
+    
+    return normalized, results
