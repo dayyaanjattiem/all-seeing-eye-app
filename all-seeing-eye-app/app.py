@@ -149,8 +149,18 @@ st.markdown("---")
 # --- Holt-Winters Forecast ---
 st.header(f"2.1 Holt-Winters Price Forecast: {holt_ticker}")
 
-# Fetch full price history just for the selected ticker
-ticker_data = yf.download(holt_ticker, start="2020-01-01", progress=False)['Close']
+# Line 152: Fetch full price history just for the selected ticker (Fixed block)
+raw_data = yf.download(holt_ticker, start="2020-01-01", progress=False, auto_adjust=False)
+
+# Check for 'Adj Close' first, fall back to 'Close'
+if 'Adj Close' in raw_data.columns:
+    ticker_data = raw_data['Adj Close']
+elif 'Close' in raw_data.columns:
+    ticker_data = raw_data['Close']
+else:
+    st.error(f"Price data (Adj Close or Close) not found for {holt_ticker}.")
+    st.stop()
+    
 forecast_series = run_holt_winters_forecast(ticker_data, FORECAST_DAYS_TS)
 
 if not forecast_series.empty:
