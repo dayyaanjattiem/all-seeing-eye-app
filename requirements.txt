@@ -1,0 +1,12 @@
+yfinance
+pandas
+numpy
+matplotlib
+scikit-learn
+tensorflow
+statsmodels
+pmdarima
+ta
+arch
+pandas_datareader
+joblib
