@@ -19,9 +19,9 @@ statsmodels
 scipy
 
 
-prophet
+prophet==1.1.5
+cmdstanpy==1.2.4
 plotly
-cmdstanpy
 
 
 
