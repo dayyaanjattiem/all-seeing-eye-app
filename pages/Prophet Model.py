@@ -2,7 +2,6 @@ import streamlit as st
 import warnings
 import pandas as pd
 import yfinance as yf
-import matplotlib.pyplot as plt
 import logging
 from datetime import datetime, timedelta
 
@@ -10,7 +9,6 @@ from datetime import datetime, timedelta
 st.set_page_config(page_title="Prophet Stock Forecaster", layout="wide", page_icon="🔮")
 
 # --- 0. Environment Setup & Imports ---
-# Cache the setup so it doesn't run on every interaction
 @st.cache_resource
 def setup_prophet_environment():
     """
@@ -131,7 +129,7 @@ if run_btn:
         df = get_data_for_prophet(ticker_input, start_date)
 
     if df is None:
-        st.error(f"Could not find data for {ticker_input}. Please checks symbol.")
+        st.error(f"Could not find data for {ticker_input}. Please check symbol.")
     else:
         # Display Current Price
         current_price = df.iloc[-1]['y']
@@ -170,7 +168,6 @@ if run_btn:
             with tab2:
                 st.subheader("Seasonal Decomposition")
                 st.markdown("Prophet breaks time series into trend, weekly, and yearly components.")
-                [Image of additive time series decomposition]
                 # Use Plotly for components
                 fig_comp = plot_components_plotly(model, forecast)
                 st.plotly_chart(fig_comp, use_container_width=True)
