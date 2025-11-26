@@ -1,27 +1,35 @@
-yfinance
-pandas
-numpy
-matplotlib
-scikit-learn
-tensorflow
-statsmodels
-pmdarima
-ta
-arch
-pandas_datareader
+# -----------------------
+# Core App
+# -----------------------
+streamlit
+plotly
 joblib
 
-streamlit
+# -----------------------
+# Data
+# -----------------------
+pandas>=1.5.0,<2.2
+numpy==1.26.4
 yfinance>=0.2.40
-pandas
-matplotlib
-statsmodels
+pandas_datareader
+
+# -----------------------
+# ML / Deep Learning
+# -----------------------
+scikit-learn
+tensorflow>=2.12,<2.16
+
+# -----------------------
+# Time Series / Stats
+# -----------------------
 scipy
+statsmodels
+pmdarima
+arch
+ta
 
-
+# -----------------------
+# Prophet (STRICTLY PINNED)
+# -----------------------
 prophet==1.1.5
 cmdstanpy==1.2.4
-plotly
-
-
-
