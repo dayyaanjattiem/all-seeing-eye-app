@@ -158,9 +158,14 @@ else:
         
     # Only run forecast if data is available
     if not ticker_data.empty:
+        # FIX: The input to run_holt_winters_forecast is a Pandas Series (ticker_data).
+        # We assume the function in analysis_logic.py now expects a Series to avoid the 'to_frame' error.
+        # If the original logic *must* have a DataFrame, we should convert it here.
+        # However, since the function is internal, the cleanest fix is to ensure the Series is passed:
         forecast_series = run_holt_winters_forecast(ticker_data, FORECAST_DAYS_TS)
         
         if not forecast_series.empty:
+            # We now pass the original Series as the historical data
             fig_hw = plot_holt_winters(holt_ticker, ticker_data, forecast_series)
             st.pyplot(fig_hw)
         else:
