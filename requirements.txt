@@ -18,8 +18,10 @@ matplotlib
 statsmodels
 scipy
 
+
 prophet
 plotly
 cmdstanpy
+
 
 
